@@ -1,0 +1,17 @@
+version: "3.8"
+services:
+  worker:
+    build: .
+    image: kaccp-worker:latest
+    env_file:
+      - .env
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./data:/app/data
+    # If you prefer to mount service account file instead of JSON env, add:
+    # - type: bind
+    #   source: ./secrets/sa.json
+    #   target: /secrets/sa.json
+    # environment:
+    #   GOOGLE_APPLICATION_CREDENTIALS: /secrets/sa.json

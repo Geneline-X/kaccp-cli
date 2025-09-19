@@ -1,0 +1,84 @@
+# Environment files
+.env
+.env.*
+!.env.example
+!.env.sample
+.envrc
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.Python
+env/
+venv/
+.venv/
+pythonenv*/
+pip-wheel-metadata/
+build/
+dist/
+*.egg-info/
+.eggs/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.tox/
+.cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+
+# Rust
+target/
+
+# Databases
+*.sqlite
+*.sqlite3
+*.db
+
+# Logs
+logs/
+*.log
+*.out
+*.err
+
+# IDE/editor
+.vscode/
+.idea/
+*.code-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker/local/dev
+docker-data/
+.local/
+tmp/
+temp/
+*.local
+
+# Project data (do not commit large/generated assets)
+data/
+data/**
+datasets/
+media/
+uploads/
+storage/
+
+# Audio chunks produced by Rust service
+data/chunks/audio_chunks/

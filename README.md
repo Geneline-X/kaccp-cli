@@ -78,6 +78,45 @@ gsutil ls gs://kaccp/audio_chunks/<source_id>/
 
 If you don’t use `gsutil`, you can also verify by listing via the GCS Console or a small Node/Python snippet with the GCS client.
 
+## Quick commands (copy–paste)
+
+Set up environment and install deps (Windows PowerShell):
+
+```powershell
+# Optional: create and activate venv
+python -m venv .venv
+.\.venv\Scripts\Activate
+
+# Install Python dependencies
+pip install -r requirements.txt
+```
+
+Download a YouTube video’s best audio to WAV using a chosen source_id (match your Prisma AudioSource.id):
+
+```powershell
+# Replace <source_id> and <VIDEO_ID>
+yt-dlp -f bestaudio/best -x --audio-format wav --no-playlist --retries 2 --socket-timeout 20 --force-ipv4 \
+  -o "./data/sources/<source_id>.%(ext)s" "https://www.youtube.com/watch?v=<VIDEO_ID>"
+```
+
+Normalize, chunk into 20s, and upload to GCS (writes JSON to data/output/):
+
+```powershell
+python process_local.py --source-id <source_id> --wav ./data/sources/<source_id>.wav --chunk-seconds 20
+```
+
+Dry-run locally (no uploads, chunks remain on disk under data/tmp/):
+
+```powershell
+python process_local.py --source-id <source_id> --wav ./data/sources/<source_id>.wav --chunk-seconds 20 --no-upload
+```
+
+Verify in GCS with gsutil (optional):
+
+```powershell
+gsutil ls gs://kaccp/audio_chunks/<source_id>/
+```
+
 ## Step 4: Import into the Node app
 Create a simple API endpoint in your Node/Next app (e.g., `POST /api/manual-import-chunks`) that accepts the JSON produced in Step 2 and performs:
 

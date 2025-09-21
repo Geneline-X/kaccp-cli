@@ -6,6 +6,9 @@ from typing import List, Tuple, Optional
 import logging
 from .config import settings
 import contextlib
+import json
+import logging
+import subprocess
 
 
 async def run_cmd_stream(cmd: list[str], timeout: Optional[int] = None) -> Tuple[int, str, str]:
@@ -133,17 +136,56 @@ async def ffprobe_duration(ffprobe_path: str, media_path: Path) -> Optional[floa
     return None
 
 
+async def detect_silences(ffmpeg_path: str, input_wav: Path) -> List[Tuple[float, float]]:
+    """
+    Run ffmpeg silencedetect to get silence start/end timestamps.
+    Returns list of (start, end) tuples.
+    """
+    cmd = [
+        ffmpeg_path,
+        "-i", str(input_wav),
+        "-af", "silencedetect=noise=-30dB:d=0.5",
+        "-f", "null", "-"
+    ]
+    # Use run_cmd_stream instead of run_cmd_capture
+    code, stdout, stderr = await run_cmd_stream(cmd, timeout=60)
+    
+    if code != 0:
+        raise RuntimeError(f"Silence detection failed: {stderr}")
+
+    silences = []
+    start = None
+    
+    for line in stderr.splitlines():
+        if "silence_start:" in line:
+            try:
+                start = float(line.split("silence_start:")[1].strip())
+            except (ValueError, IndexError):
+                continue
+        elif "silence_end:" in line and start is not None:
+            try:
+                end = float(line.split("silence_end:")[1].split("|")[0].strip())
+                silences.append((start, end))
+                start = None
+            except (ValueError, IndexError):
+                continue
+    return silences
+
+
 async def normalize_and_chunk(
     ffmpeg_path: str,
     input_media: Path,
     output_dir: Path,
     chunk_seconds: int,
-) -> List[Path]:
+) -> Tuple[List[Path], List[float]]:  # Now returns (chunks, durations)
+    """
+    Normalize to 16k mono, then chunk into segments of 15–20s aligned with silences if possible.
+    """
     logging.info("[normalize] start input=%s", input_media)
     output_dir.mkdir(parents=True, exist_ok=True)
     norm_wav = output_dir / "normalized.wav"
 
-    # Normalize to mono 16k with loudnorm
+    # Step 1: Normalize
     cmd_norm = [
         ffmpeg_path,
         "-y",
@@ -159,28 +201,59 @@ async def normalize_and_chunk(
         raise RuntimeError(f"ffmpeg normalization failed: {err}")
     logging.info("[normalize] done output=%s", norm_wav)
 
-    # Segment
-    pattern = output_dir / "chunk_%04d.wav"
-    logging.info("[segment] start seconds=%s pattern=%s", chunk_seconds, pattern)
-    cmd_seg = [
-        ffmpeg_path,
-        "-y",
-        "-i", str(norm_wav),
-        "-f", "segment",
-        "-segment_time", str(chunk_seconds),
-        "-c", "copy",
-        "-reset_timestamps", "1",
-        str(pattern),
-    ]
-    code, _, err = await run_cmd_stream(cmd_seg, timeout=600)
-    if code != 0:
-        raise RuntimeError(f"ffmpeg segmenting failed: {err}")
+    # Step 2: Detect silences
+    silences = await detect_silences(ffmpeg_path, norm_wav)
+    logging.info("[silence] detected %d silences", len(silences))
 
+    # Step 3: Smart chunking between 15–20s
     chunks: List[Path] = []
-    for p in sorted(output_dir.iterdir()):
-        if p.is_file() and p.name.startswith("chunk_") and p.suffix.lower() == ".wav":
-            chunks.append(p)
-    if not chunks:
-        raise RuntimeError("no chunks produced")
+    actual_durations: List[float] = []
+    current_start = 0.0
+    max_len = chunk_seconds
+    min_len = chunk_seconds - 5  # e.g. 15s if chunk_seconds=20
+
+    # Convert silences into candidate cut points
+    silence_points = [s[0] for s in silences] + [s[1] for s in silences]
+
+    ffprobe_path = ffmpeg_path.replace('ffmpeg', 'ffprobe')
+    duration = await ffprobe_duration(ffprobe_path, norm_wav)
+    if duration is None:
+        raise RuntimeError("Could not probe audio duration")
+
+    while current_start < duration:
+        target_end = current_start + min_len
+        cut_point = None
+
+        # Find nearest silence after min_len but before max_len
+        for sp in silence_points:
+            if target_end <= sp <= current_start + max_len:
+                cut_point = sp
+                break
+
+        if cut_point is None:
+            cut_point = min(current_start + max_len, duration)
+
+        # Calculate actual duration for this chunk
+        actual_duration = cut_point - current_start
+        actual_durations.append(actual_duration)
+
+        out_file = output_dir / f"chunk_{len(chunks):04d}.wav"
+        cmd_cut = [
+            ffmpeg_path,
+            "-y",
+            "-i", str(norm_wav),
+            "-ss", str(current_start),
+            "-to", str(cut_point),
+            "-c", "copy",
+            str(out_file),
+        ]
+        code, _, err = await run_cmd_stream(cmd_cut, timeout=600)
+        if code != 0:
+            raise RuntimeError(f"ffmpeg chunking failed: {err}")
+
+        chunks.append(out_file)
+        current_start = cut_point
+
     logging.info("[segment] done count=%d", len(chunks))
-    return chunks
+    return chunks, actual_durations
+

@@ -35,7 +35,8 @@ async def process_local(source_id: str, wav_path: Path, chunk_seconds: int, uplo
     total_dur = await ffprobe_duration(settings.ffprobe_path, wav_path)
 
     logging.info("[local] normalizing and chunking: chunk_seconds=%s", chunk_seconds)
-    chunks_local: List[Path] = await normalize_and_chunk(settings.ffmpeg_path, wav_path, workdir, chunk_seconds)
+    # Now receives both chunks and their actual durations
+    chunks_local, actual_durations = await normalize_and_chunk(settings.ffmpeg_path, wav_path, workdir, chunk_seconds)
 
     logging.info("[local] %d chunks ready", len(chunks_local))
 
@@ -49,27 +50,27 @@ async def process_local(source_id: str, wav_path: Path, chunk_seconds: int, uplo
             uri = str(p.resolve())
         uris.append(uri)
 
-    # Build chunksMeta similar to worker webhook
+    # Build chunksMeta using the actual durations from chunking
     chunks_meta = []
-    for i, uri in enumerate(uris, start=1):
-        start_sec = (i - 1) * chunk_seconds
-        if total_dur is not None:
-            end_sec = min(int(start_sec + chunk_seconds), int(total_dur))
-        else:
-            end_sec = start_sec + chunk_seconds
-        duration_sec = max(0, end_sec - start_sec)
+    current_start = 0.0
+    
+    for i, (uri, actual_duration) in enumerate(zip(uris, actual_durations), start=1):
+        end_sec = current_start + actual_duration
+        
         chunks_meta.append({
             "index": i,
-            "startSec": start_sec,
-            "endSec": end_sec,
-            "durationSec": duration_sec,
+            "startSec": int(round(current_start)),
+            "endSec": int(round(end_sec)),
+            "durationSec": int(round(actual_duration)),
             "gcsUri": uri if upload else None,
             "localPath": None if upload else uri,
         })
+        
+        current_start = end_sec
 
     payload = {
         "sourceId": source_id,
-        "totalDurationSeconds": int(total_dur) if total_dur is not None else None,
+        "totalDurationSeconds": int(round(total_dur)) if total_dur is not None else None,
         "chunkSeconds": chunk_seconds,
         "chunksMeta": chunks_meta,
     }

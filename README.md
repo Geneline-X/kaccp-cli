@@ -92,7 +92,7 @@ Other optional variables:
 
 ```powershell
 # Clone the repository
-git clone https://github.com/Geneline-X/kaccp-cli.git
+git clone https://github.com/your-org/kaccp-cli.git
 cd kaccp-cli
 
 # (Optional) Create and activate a virtual environment

@@ -1,42 +1,101 @@
-# KACCP Media Processing – Local CLI Usage
+# KACCP Media Processing
 
-This doc shows how to use the local/manual workflow to build your audio dataset:
+[![Build Status](https://github.com/your-org/kaccp-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/kaccp-cli/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 
-- Download audio from YouTube with `yt-dlp`.
-- Normalize, chunk, and (optionally) upload chunks to Google Cloud Storage (GCS) with `process_local.py`.
-- Import the resulting JSON into your Node app to create `AudioSource` and `AudioChunk` rows for the transcriber UI.
+A CLI tool developed by **[Geneline-X](https://geneline-x.net)** for downloading, normalizing, chunking, and optionally uploading audio from YouTube to Google Cloud Storage (GCS) for the KACCP transcription platform. Supports both local/manual workflows and future always-on worker (FastAPI) workflows.
 
-If you prefer an always-on service, you can run the FastAPI worker in `app/`, but the steps below assume a manual, low-ops flow.
+---
+
+## Table of Contents
+
+- [About](#about)
+- [Features](#features)
+- [Prerequisites](#prerequisites)
+- [Environment Setup](#environment-setup)
+- [Installation](#installation)
+- [Usage / CLI Commands](#usage--cli-commands)
+- [Folder / Project Structure](#folder--project-structure)
+- [How It Works](#how-it-works)
+- [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
+- [License](#license)
+- [Acknowledgements](#acknowledgements)
+
+---
+
+## About
+
+**KACCP Media Processing** is a Python CLI tool developed and maintained by **[Geneline-X](https://geneline-x.net)** for the Krio Audio Corpus Collection Platform (KACCP). It streamlines audio preparation for transcription by automating the download, normalization, chunking, and (optionally) uploading of YouTube audio to Google Cloud Storage. It also generates JSON metadata compatible with Node/Next.js apps using Prisma for seamless import into the transcription workflow.
+
+**Audience:**
+
+- Developers and admins managing KACCP datasets
+- Contributors preparing audio for transcription
+- Researchers building low-resource language corpora
+
+**Use Case:**
+
+- Crowdsourcing audio for transcription in Krio (and future languages)
+- Building high-quality datasets for NLP and speech research
+- Managing workflow, quality, and secure audio uploads
+
+---
+
+## Features
+
+- Download audio from YouTube via [yt-dlp](https://github.com/yt-dlp/yt-dlp)
+- Normalize audio to mono 16kHz WAV using [ffmpeg](https://ffmpeg.org/)
+- Smart chunking of audio into configurable segment lengths
+- Optional upload of audio chunks to Google Cloud Storage (GCS)
+- Generates JSON metadata for Node/Next.js apps (Prisma AudioSource/AudioChunk)
+- Dry-run mode for local testing (no upload)
+- Supports both manual CLI and always-on FastAPI worker modes
+
+---
 
 ## Prerequisites
+
 - Python 3.11+
-- ffmpeg/ffprobe installed and on PATH (or set `FFMPEG_PATH`/`FFPROBE_PATH` in `.env`)
-- `yt-dlp` installed on PATH (`pip install yt-dlp`)
-- (If uploading) GCP service account with Storage write access to your bucket
+- [ffmpeg](https://ffmpeg.org/) and [ffprobe](https://ffmpeg.org/ffprobe.html) installed and on PATH (or specify via `.env`)
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp) installed
+- Google Cloud service account with Storage write access (if uploading to GCS)
 
-## Environment (.env)
-Set these in `.env` at project root:
+---
 
-```
+## Environment Setup
+
+Create a `.env` file at the project root with the following variables:
+
+```env
 GCS_BUCKET=kaccp
-# Option A: Inline JSON (local/dev)
+# Option A: Inline JSON credentials
 GCS_SERVICE_ACCOUNT_JSON='{"type":"service_account", ... }'
 # Option B: Path to JSON file
 # GOOGLE_APPLICATION_CREDENTIALS=C:\path\to\sa.json
 
-# Optional tool paths if not on PATH
+# Optional: override tool paths if not on PATH
 FFMPEG_PATH=ffmpeg
 FFPROBE_PATH=ffprobe
 ```
 
-## Step 1: Download source audio with yt-dlp
-Pick a `source_id` that will be the `AudioSource.id` in your Node/Prisma DB (recommended to use a real cuid from your app so paths align exactly).
+Other optional variables:
+
+- `CHUNK_SECONDS` – Default chunk length (default: 20)
+- `DEFAULT_WEBHOOK_URL` – For FastAPI worker mode
+- `WEBHOOK_AUTH_TOKEN` – For webhook authentication
+
+---
+
+## Installation
 
 ```powershell
-yt-dlp -f bestaudio/best -x --audio-format wav --no-playlist --retries 2 --socket-timeout 20 --force-ipv4 \
-  -o "./data/sources/<source_id>.%(ext)s" "https://www.youtube.com/watch?v=<VIDEO_ID>"
-```
+# Clone the repository
+git clone https://github.com/your-org/kaccp-cli.git
+cd kaccp-cli
 
+<<<<<<< HEAD
 This produces: `data/sources/<source_id>.wav`
 
 ## Step 2: Normalize, chunk, and upload to GCS
@@ -84,6 +143,9 @@ Set up environment and install deps (Windows PowerShell):
 
 ```powershell
 # Optional: create and activate venv
+=======
+# (Optional) Create and activate a virtual environment
+>>>>>>> 1714252580bbb96b902f948ebc8873acb3fa09d3
 python -m venv .venv
 .\.venv\Scripts\Activate
 
@@ -91,195 +153,120 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-Download a YouTube video’s best audio to WAV using a chosen source_id (match your Prisma AudioSource.id):
+---
+
+## Usage / CLI Commands
+
+### 1. Download YouTube Audio
 
 ```powershell
-# Replace <source_id> and <VIDEO_ID>
-yt-dlp -f bestaudio/best -x --audio-format wav --no-playlist --retries 2 --socket-timeout 20 --force-ipv4 \
+yt-dlp -f bestaudio/best -x --audio-format wav --no-playlist --retries 2 --socket-timeout 20 --force-ipv4 `
   -o "./data/sources/<source_id>.%(ext)s" "https://www.youtube.com/watch?v=<VIDEO_ID>"
 ```
 
-Normalize, chunk into 20s, and upload to GCS (writes JSON to data/output/):
+### 2. Normalize, Chunk, and (Optionally) Upload
 
 ```powershell
 python process_local.py --source-id <source_id> --wav ./data/sources/<source_id>.wav --chunk-seconds 20
 ```
 
-Dry-run locally (no uploads, chunks remain on disk under data/tmp/):
+- Add `--no-upload` for a dry-run (chunks remain local, not uploaded).
 
-```powershell
-python process_local.py --source-id <source_id> --wav ./data/sources/<source_id>.wav --chunk-seconds 20 --no-upload
-```
+### 3. Output
 
-Verify in GCS with gsutil (optional):
+- Chunks uploaded to: `gs://<GCS_BUCKET>/audio_chunks/<source_id>/chunk_XXXX.wav`
+- JSON metadata written to: `data/output/<source_id>_chunks.json` and printed to stdout
 
-```powershell
-gsutil ls gs://kaccp/audio_chunks/<source_id>/
-```
+### 4. Import JSON into Node App
 
-## Step 4: Import into the Node app
-Create a simple API endpoint in your Node/Next app (e.g., `POST /api/manual-import-chunks`) that accepts the JSON produced in Step 2 and performs:
-
-- Create/Update `AudioSource` with:
-  - `id = sourceId`
-  - `totalDurationSeconds`, `status = READY`
-- Upsert `AudioChunk` for each `chunksMeta[i]` with:
-  - `sourceId`, `index`, `startSec`, `endSec`, `durationSec`, `storageUri = gcsUri`, `status = AVAILABLE`
-
-After that, your transcriber UI can request chunks for a given `sourceId`, and your Node app should generate signed URLs for each `storageUri` using `@google-cloud/storage`.
-
-## Serving to transcribers
-- Generate a signed URL per chunk URI (gs://…) in Node for secure HTTP access (time-limited).
-- Do not make the bucket public unless you truly want public access.
-
-## Troubleshooting
-- No chunks appear in GCS:
-  - Ensure `.env` has `GCS_BUCKET` set and valid credentials (inline JSON or `GOOGLE_APPLICATION_CREDENTIALS`).
-  - The service account must have Storage write permissions for the bucket.
-- ffmpeg/ffprobe not found:
-  - Install them and/or set `FFMPEG_PATH` / `FFPROBE_PATH` in `.env`.
-- Audio looks too quiet/loud or stereo:
-  - The pipeline applies loudness normalization and converts to mono 16 kHz. Adjust filters in `app/pipeline.py` if needed.
-- Use a different chunk length:
-  - Pass `--chunk-seconds <N>` to `process_local.py` (default 20).
+- Use the generated JSON to create/update `AudioSource` and `AudioChunk` records in your Node/Next.js app.
 
 ---
 
-# Appendix – Git & Repo Hygiene (previous guide)
+## Folder / Project Structure
 
-This section preserves the previous Git workflow tips for convenience.
-
-## Prerequisites
-- Git installed
-- A GitHub account and an existing repo (or permission to create one)
-- Windows PowerShell or your preferred terminal
-
-## Project Structure Highlights
-- `.gitignore` is configured to exclude:
-  - Environment files: `.env`, `.env.*` (examples like `.env.example` are allowed)
-  - Data directories: `data/`, `uploads/`, `media/`, `storage/`
-  - Build artifacts and caches for Python/Node/Rust
-  - Logs and IDE/OS clutter
-- If your pipeline generates audio chunks, they should live under `data/chunks/audio_chunks/` and will be ignored by Git.
-
-## Environment Variables
-- Keep secrets in `.env` (ignored by Git).
-- Optionally create `.env.example` with placeholder keys for collaborators:
-  ```env
-  API_KEY=your_key_here
-  SERVICE_URL=http://localhost:8000
-  # Add other required variables here
-  ```
-
-## First-Time Git Setup
-1. Initialize the repository (if not already):
-   ```powershell
-   git init
-   ```
-2. Add a remote (replace with your repo URL):
-   ```powershell
-   git remote add origin https://github.com/<your-username>/<your-repo>.git
-   ```
-3. Verify remotes:
-   ```powershell
-   git remote -v
-   ```
-
-## Verify .gitignore is Working
-- Check current status:
-  ```powershell
-  git status
-  ```
-- Files like `.env` and folders like `data/` should appear under “Untracked files” ONLY if they were not already committed previously. If they are already tracked, see next section.
-
-## Stop Tracking Files Already Committed by Mistake
-If you previously committed sensitive or large files (e.g., `.env`, `data/`):
-
-1. Remove them from the index while keeping local copies:
-   ```powershell
-   git rm --cached .env
-   git rm -r --cached data
-   ```
-   Add other paths as needed (e.g., `uploads/`, `storage/`).
-
-2. Commit the removal and the updated `.gitignore`:
-   ```powershell
-   git add .gitignore
-   git commit -m "chore: stop tracking secrets/data and update .gitignore"
-   ```
-
-3. Push the changes:
-   ```powershell
-   git push -u origin main
-   ```
-   If your default branch is `master` or something else, substitute accordingly.
-
-Note: If secrets were pushed to a public repository, rotate them immediately and consider using GitHub’s secret scanning tools or history rewrite tools (e.g., `git filter-repo`) to purge history.
-
-## Normal Commit and Push Workflow
-1. Check what will be committed:
-   ```powershell
-   git status
-   ```
-2. Stage changes:
-   ```powershell
-   git add <files-or-folders>
-   # or add everything that isn't ignored
-   git add .
-   ```
-3. Commit with a clear message:
-   ```powershell
-   git commit -m "feat: add new endpoint for X"
-   ```
-4. Push to GitHub:
-   ```powershell
-   git push
-   ```
-
-## Branching Workflow (Recommended)
-- Create a feature branch:
-  ```powershell
-  git checkout -b feat/new-feature
-  ```
-- Push the branch and open a Pull Request on GitHub:
-  ```powershell
-  git push -u origin feat/new-feature
-  ```
-
-## Common CLI Commands Cheat Sheet
-- Show current branch and changes:
-  ```powershell
-  git status
-  ```
-- View commit history (last 10):
-  ```powershell
-  git log -n 10 --oneline
-  ```
-- See what changed in working tree:
-  ```powershell
-  git diff
-  ```
-- Discard local changes in a file:
-  ```powershell
-  git checkout -- path\to\file
-  ```
-- Pull latest from default branch:
-  ```powershell
-  git pull
-  ```
-
-## Safety Tips
-- Never commit real secrets. Use `.env` locally and add `.env.example` for documentation.
-- Keep `data/` and other large/generated assets out of Git; rely on cloud storage or build pipelines instead.
-- If you accidentally commit secrets, rotate them and remove them from Git history.
-
-## Troubleshooting
-- `.env` or `data/` keep showing up in commits:
-  - Ensure the entries exist in `.gitignore`.
-  - If already tracked, run `git rm --cached` as described above.
-- Pushing to the wrong branch:
-  - Check your branch with `git branch --show-current`.
-  - Push with `git push -u origin <branch>`.
+```
+kaccp-cli/
+├── app/
+│   ├── __init__.py         # Package marker
+│   ├── config.py           # Environment/config management
+│   ├── jobs.py             # In-memory job store for FastAPI worker
+│   ├── main.py             # FastAPI worker entrypoint
+│   ├── models.py           # Pydantic models for API and metadata
+│   ├── pipeline.py         # Audio processing pipeline (normalize, chunk)
+│   ├── storage.py          # GCS upload logic
+├── process_local.py        # CLI script for local/manual processing
+├── requirements.txt        # Python dependencies
+├── Dockerfile              # Docker build for FastAPI worker
+├── docker-compose.yml      # Docker Compose for local dev
+├── .gitignore              # Git ignore rules
+├── README.md               # Project documentation
+```
 
 ---
-If you want, I can run the safe untracking and status commands for you from the terminal. Just say “run the git cleanup steps.”
+
+## How It Works
+
+1. **Download** – Fetch best audio from YouTube using `yt-dlp`.
+2. **Normalize** – Convert to mono, 16kHz WAV and loudness-normalize via ffmpeg.
+3. **Chunk** – Split audio into segments (default 20s).
+4. **Upload** – Optional upload to GCS.
+5. **Metadata** – JSON describing all chunks is generated.
+6. **Import** – Use JSON to upsert `AudioSource` and `AudioChunk` in your database.
+7. **Optional** – Run as an always-on FastAPI worker for API-driven ingestion.
+
+---
+
+## Troubleshooting
+
+- **ffmpeg/ffprobe not found** – Ensure installed or set `FFMPEG_PATH`/`FFPROBE_PATH` in `.env`.
+- **GCS upload fails** – Check `GCS_BUCKET` and credentials; ensure service account has write permissions.
+- **No chunks produced** – Verify WAV file path/format; check pipeline logs.
+- **Audio issues** – Adjust filters in `app/pipeline.py` if needed.
+- **Debugging** – Use `--no-upload` to test locally.
+
+---
+
+## Contributing
+
+1. **Fork** and create a branch:
+
+```powershell
+git checkout -b feat/your-feature
+```
+
+2. **Commit** changes:
+
+```powershell
+git add .
+git commit -m "feat: add your feature"
+```
+
+3. **Push** and open a Pull Request.
+
+**Git Hygiene:**
+
+- Do not commit large/generated files (`data/`, audio chunks)
+- Keep secrets in `.env` (never commit real credentials)
+- Add `.env.example` for documentation
+
+---
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
+
+---
+
+## Acknowledgements
+
+- Developed and maintained by **[Geneline-X](https://geneline-x.net)**
+- [Python](https://www.python.org/)
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp)
+- [ffmpeg](https://ffmpeg.org/)
+- [Google Cloud Storage](https://cloud.google.com/storage)
+- All contributors and the open-source community
+
+---
+## Support
+For questions or support, contact [Geneline-X](mailto:contact@geneline-x.net)

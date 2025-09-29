@@ -43,7 +43,7 @@ This produces: `data/sources/<source_id>.wav`
 Use the provided script which reuses the pipeline in `app/pipeline.py` and uploader in `app/storage.py`:
 
 ```powershell
-python process_local.py --source-id <source_id> --wav ./data/sources/<source_id>.wav --chunk-seconds 20
+python process_local.py --source-id <source_id> --wav ./data/sources/<source_id>.wav
 ```
 
 - Without uploading (dry-run): add `--no-upload` to keep chunks locally and inspect them first.

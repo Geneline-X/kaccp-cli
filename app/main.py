@@ -77,7 +77,7 @@ async def _run_job(job_id: UUID, url: str):
         chunk_seconds = js.chunk_seconds if js and js.chunk_seconds else settings.chunk_seconds
 
         job_store.update_progress(job_id, 0.15, "normalizing audio")
-        chunks_local = await normalize_and_chunk(settings.ffmpeg_path, downloaded, workdir, chunk_seconds)
+        chunks_local, actual_durations = await normalize_and_chunk(settings.ffmpeg_path, downloaded, workdir, chunk_seconds)
         logging.info("[job %s] chunking done: %d chunks", job_id, len(chunks_local))
         job_store.update_progress(job_id, 0.50, "chunking complete; uploading")
 
